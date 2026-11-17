@@ -7,6 +7,7 @@ import pytest
 # Base de datos temporal para no tocar la real; debe definirse antes de importar la app
 _tmp = Path(tempfile.mkdtemp()) / "pruebas.db"
 os.environ["DATABASE_URL"] = f"sqlite:///{_tmp.as_posix()}"
+os.environ["ADMIN_PASSWORD"] = "clave-pruebas"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -17,3 +18,10 @@ from app.main import app  # noqa: E402
 def cliente():
     with TestClient(app) as c:   # el "with" ejecuta el arranque, que carga los 5.000 lotes
         yield c
+
+
+@pytest.fixture(scope="session")
+def admin(cliente):
+    """Cabecera con el token de administrador."""
+    token = cliente.post("/api/admin/ingresar", json={"contrasena": "clave-pruebas"}).json()["token"]
+    return {"Authorization": f"Bearer {token}"}

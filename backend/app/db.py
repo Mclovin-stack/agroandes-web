@@ -10,7 +10,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import Date, DateTime, Float, String, create_engine, func, select
+from sqlalchemy import Date, DateTime, Float, String, create_engine, func, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 BACKEND = Path(__file__).resolve().parent.parent
@@ -64,20 +64,37 @@ def _limpio(v):
     return None if math.isnan(v) else round(v, 2)
 
 
+def _cargar_csv(s: Session, limpio: pd.DataFrame) -> int:
+    filas = [
+        {"municipio": r.municipio, "cultivo": r.cultivo, "sistema_riego": r.sistema_riego,
+         "fecha_cosecha": r.fecha_cosecha.date(), "origen": "historico",
+         **{c: _limpio(getattr(r, c)) for c in CAMPOS_NUM}}
+        for r in limpio.sort_values("id_lote").itertuples()
+    ]
+    s.execute(Lote.__table__.insert(), filas)
+    return len(filas)
+
+
 def iniciar(limpio: pd.DataFrame) -> None:
     """Crea la tabla y, si está vacía, la llena con los lotes del CSV."""
     Base.metadata.create_all(engine)
     with SessionLocal() as s:
         if s.scalar(select(func.count(Lote.id))):
             return
-        filas = [
-            {"municipio": r.municipio, "cultivo": r.cultivo, "sistema_riego": r.sistema_riego,
-             "fecha_cosecha": r.fecha_cosecha.date(), "origen": "historico",
-             **{c: _limpio(getattr(r, c)) for c in CAMPOS_NUM}}
-            for r in limpio.sort_values("id_lote").itertuples()
-        ]
-        s.execute(Lote.__table__.insert(), filas)
+        _cargar_csv(s, limpio)
         s.commit()
+
+
+def restaurar(s: Session, limpio: pd.DataFrame) -> int:
+    """Borra todos los lotes y vuelve a cargar los del CSV, con su numeración original (1 a 5.000)."""
+    if engine.dialect.name == "postgresql":
+        s.execute(text("TRUNCATE TABLE lotes RESTART IDENTITY"))
+    else:
+        s.execute(Lote.__table__.delete())   # en SQLite el id vuelve a empezar en 1 con la tabla vacía
+    n = _cargar_csv(s, limpio)
+    s.commit()
+    marcar_cambio()
+    return n
 
 
 def sesion():

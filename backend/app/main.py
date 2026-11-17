@@ -18,7 +18,9 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from . import analisis, clima, db
+from pydantic import BaseModel, Field
+
+from . import analisis, clima, db, seguridad
 from .esquemas import CAMPOS, CULTIVOS, MUNICIPIOS, RIEGOS, LoteEntrada, LoteSalida, PaginaLotes, mensaje
 from .limpieza import cargar
 
@@ -58,11 +60,40 @@ async def errores_validacion(_: Request, exc: RequestValidationError):
 
 
 Sesion = Annotated[Session, Depends(db.sesion)]
+Admin = Depends(seguridad.requiere_admin)
 
 
 @app.get("/api/salud")
 def salud(s: Sesion):
     return {"estado": "ok", "lotes": s.scalar(select(func.count(db.Lote.id))), "base": db.engine.dialect.name}
+
+
+# ---------------------------------------------------------------- administrador
+class Ingreso(BaseModel):
+    contrasena: str = Field(min_length=1, max_length=200)
+
+
+@app.get("/api/admin/estado")
+def estado_admin():
+    return {"configurado": seguridad.contrasena() is not None}
+
+
+@app.post("/api/admin/ingresar")
+def ingresar(datos: Ingreso, request: Request):
+    seguridad.comprobar_contrasena(request, datos.contrasena)
+    token, vence = seguridad.crear_token(seguridad.contrasena())
+    return {"token": token, "vence": vence}
+
+
+@app.get("/api/admin/verificar", dependencies=[Admin])
+def verificar():
+    return {"valido": True}
+
+
+@app.post("/api/admin/restaurar", dependencies=[Admin])
+def restaurar(s: Sesion):
+    _, limpio = csv_original()
+    return {"lotes": db.restaurar(s, limpio)}
 
 
 # ---------------------------------------------------------------- análisis
@@ -178,7 +209,7 @@ def crear_lote(datos: LoteEntrada, s: Sesion):
     return lote
 
 
-@app.put("/api/lotes/{lote_id}", response_model=LoteSalida)
+@app.put("/api/lotes/{lote_id}", response_model=LoteSalida, dependencies=[Admin])
 def editar_lote(lote_id: int, datos: LoteEntrada, s: Sesion):
     lote = _buscar(s, lote_id)
     for k, v in datos.model_dump().items():
@@ -189,7 +220,7 @@ def editar_lote(lote_id: int, datos: LoteEntrada, s: Sesion):
     return lote
 
 
-@app.delete("/api/lotes/{lote_id}", status_code=204)
+@app.delete("/api/lotes/{lote_id}", status_code=204, dependencies=[Admin])
 def borrar_lote(lote_id: int, s: Sesion):
     s.delete(_buscar(s, lote_id))
     s.commit()

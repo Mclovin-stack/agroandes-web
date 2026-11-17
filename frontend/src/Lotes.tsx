@@ -7,8 +7,9 @@ const INICIAL: ConsultaLotes = { buscar: '', municipio: '', cultivo: '', riego: 
 const RIEGO: Record<string, string> = { No: 'Sin riego', Goteo: 'Goteo', 'Aspersión': 'Aspersión', 'Sí': 'Sin especificar' }
 const fecha = (f: string) => { const [a, m, d] = f.split('-'); return `${d}/${m}/${a}` }
 
-export default function Lotes({ opciones, version, onCambio }: {
+export default function Lotes({ opciones, version, onCambio, esAdmin, comoAdmin }: {
   opciones: Opciones; version: number; onCambio: (mensaje: string) => void
+  esAdmin: boolean; comoAdmin: (motivo: string, accion: () => void) => void
 }) {
   const [q, setQ] = useState<ConsultaLotes>(INICIAL)
   const [texto, setTexto] = useState('')
@@ -18,6 +19,7 @@ export default function Lotes({ opciones, version, onCambio }: {
   const [form, setForm] = useState<{ abierto: boolean; lote: Lote | null }>({ abierto: false, lote: null })
   const [aBorrar, setABorrar] = useState<Lote | null>(null)
   const [resaltado, setResaltado] = useState<number | null>(null)
+  const [restaurando, setRestaurando] = useState(false)
 
   // búsqueda con una pequeña espera para no consultar en cada tecla
   useEffect(() => {
@@ -61,7 +63,10 @@ export default function Lotes({ opciones, version, onCambio }: {
           <div className="cabeza"><span className="rotulo">Gestión de lotes</span>
             <h2 id="t-lotes">Lotes y terrenos de AgroAndes</h2>
             <p className="entrada">Registra lotes nuevos, corrige los existentes o bórralos. Cada cambio se guarda en la base de datos y actualiza los gráficos del análisis.</p></div>
-          <button type="button" className="primario grande" onClick={() => setForm({ abierto: true, lote: null })}>+ Registrar lote</button>
+          <div className="acciones">
+            {esAdmin && <button type="button" className="grande peligro" onClick={() => setRestaurando(true)}>Restaurar datos originales</button>}
+            <button type="button" className="primario grande" onClick={() => setForm({ abierto: true, lote: null })}>+ Registrar lote</button>
+          </div>
         </div>
 
         <div className="herramienta">
@@ -115,8 +120,8 @@ export default function Lotes({ opciones, version, onCambio }: {
                     <td className="d num">{n1(l.temperatura_c)}</td><td className="d num">{n1(l.ph_suelo)}</td>
                     <td><span className={l.origen === 'registrado' ? 'pastilla alta' : 'pastilla baja'}>{l.origen === 'registrado' ? 'Registrado' : 'Histórico'}</span></td>
                     <td className="acciones-fila">
-                      <button type="button" className="mini" onClick={() => setForm({ abierto: true, lote: l })} aria-label={`Editar lote ${l.id}`}>Editar</button>
-                      <button type="button" className="mini peligro" onClick={() => setABorrar(l)} aria-label={`Borrar lote ${l.id}`}>Borrar</button>
+                      <button type="button" className="mini" onClick={() => comoAdmin(`Para editar el lote #${l.id} necesitas la contraseña de administrador.`, () => setForm({ abierto: true, lote: l }))} aria-label={`Editar lote ${l.id}`}>Editar</button>
+                      <button type="button" className="mini peligro" onClick={() => comoAdmin(`Para borrar el lote #${l.id} necesitas la contraseña de administrador.`, () => setABorrar(l))} aria-label={`Borrar lote ${l.id}`}>Borrar</button>
                     </td>
                   </tr>
                 ))}
@@ -150,6 +155,8 @@ export default function Lotes({ opciones, version, onCambio }: {
         onCerrar={() => setForm({ abierto: false, lote: null })} onGuardado={guardado} />
       <ConfirmarBorrado lote={aBorrar} onCerrar={() => setABorrar(null)}
         onBorrado={l => { setABorrar(null); onCambio(`Lote #${l.id} borrado`) }} />
+      <ConfirmarRestaurar abierto={restaurando} onCerrar={() => setRestaurando(false)}
+        onRestaurado={n => { setRestaurando(false); setTexto(''); setQ(INICIAL); onCambio(`Datos restaurados: ${n0(n)} lotes originales`) }} />
     </main>
   )
 }
@@ -183,6 +190,41 @@ function ConfirmarBorrado({ lote, onCerrar, onBorrado }: { lote: Lote | null; on
           <footer className="modal-pie">
             <button type="button" onClick={onCerrar}>Cancelar</button>
             <button type="button" className="peligro-lleno" onClick={borrar} disabled={borrando}>{borrando ? 'Borrando…' : 'Sí, borrar'}</button>
+          </footer>
+        </div>
+      )}
+    </dialog>
+  )
+}
+
+function ConfirmarRestaurar({ abierto, onCerrar, onRestaurado }: { abierto: boolean; onCerrar: () => void; onRestaurado: (n: number) => void }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  const [trabajando, setTrabajando] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const d = ref.current!
+    if (abierto) { setError(null); if (!d.open) d.showModal() } else if (d.open) d.close()
+  }, [abierto])
+
+  async function restaurar() {
+    setTrabajando(true)
+    try { const r = await api.restaurar(); onRestaurado(r.lotes) }
+    catch (e) { setError(e instanceof ErrorApi ? e.message : 'No se pudieron restaurar los datos.') }
+    finally { setTrabajando(false) }
+  }
+
+  return (
+    <dialog ref={ref} className="modal pequeno" onCancel={e => { e.preventDefault(); onCerrar() }} aria-labelledby="t-restaurar">
+      {abierto && (
+        <div className="confirmar">
+          <h2 id="t-restaurar">¿Restaurar los datos originales?</h2>
+          <p>Se borran <b>todos</b> los lotes actuales, incluidos los registrados desde la página, y se vuelven a cargar los 5.000 lotes del archivo original.</p>
+          <p className="peq">Esta acción no se puede deshacer.</p>
+          {error && <p className="error" role="alert">{error}</p>}
+          <footer className="modal-pie">
+            <button type="button" onClick={onCerrar}>Cancelar</button>
+            <button type="button" className="peligro-lleno" onClick={restaurar} disabled={trabajando}>{trabajando ? 'Restaurando…' : 'Sí, restaurar'}</button>
           </footer>
         </div>
       )}

@@ -60,16 +60,34 @@ export class ErrorApi extends Error {
   constructor(mensaje: string, public estado: number, public errores: Record<string, string> = {}) { super(mensaje) }
 }
 
+// ---- sesión de administrador: el token vive en sessionStorage (se borra al cerrar la pestaña)
+const LLAVE = 'agroandes-admin'
+const oyentes = new Set<(t: string | null) => void>()
+let token: string | null = (() => { try { return sessionStorage.getItem(LLAVE) } catch { return null } })()
+
+export const sesion = {
+  token: () => token,
+  poner(t: string | null) {
+    token = t
+    try { if (t) sessionStorage.setItem(LLAVE, t); else sessionStorage.removeItem(LLAVE) } catch { /* sin almacenamiento */ }
+    oyentes.forEach(f => f(t))
+  },
+  escuchar(f: (t: string | null) => void) { oyentes.add(f); return () => { oyentes.delete(f) } },
+}
+
 async function pedir<T>(ruta: string, opciones: RequestInit = {}): Promise<T> {
   let r: Response
   try {
-    r = await fetch(ruta, { ...opciones, headers: { 'Content-Type': 'application/json', ...opciones.headers } })
+    const auth: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+    r = await fetch(ruta, { ...opciones, headers: { 'Content-Type': 'application/json', ...auth, ...opciones.headers } })
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e
     throw new ErrorApi('No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.', 0)
   }
   if (r.status === 204) return undefined as T
   const cuerpo = await r.json().catch(() => ({}))
+  // token vencido o inválido en una ruta de administrador: se cierra la sesión
+  if (r.status === 401 && token && !ruta.startsWith('/api/admin/ingresar')) sesion.poner(null)
   if (!r.ok) {
     const detalle = typeof cuerpo.detail === 'string' ? cuerpo.detail : `El servidor respondió ${r.status}`
     throw new ErrorApi(detalle, r.status, cuerpo.errores ?? {})
@@ -132,6 +150,14 @@ export const api = {
   crearLote: (d: LoteDatos) => pedir<Lote>('/api/lotes', { method: 'POST', body: JSON.stringify(d) }),
   editarLote: (id: number, d: LoteDatos) => pedir<Lote>(`/api/lotes/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
   borrarLote: (id: number) => pedir<void>(`/api/lotes/${id}`, { method: 'DELETE' }),
+
+  adminConfigurado: () => pedir<{ configurado: boolean }>('/api/admin/estado'),
+  ingresar: async (contrasena: string) => {
+    const r = await pedir<{ token: string; vence: number }>('/api/admin/ingresar', { method: 'POST', body: JSON.stringify({ contrasena }) })
+    sesion.poner(r.token)
+  },
+  verificarSesion: () => pedir<{ valido: boolean }>('/api/admin/verificar'),
+  restaurar: () => pedir<{ lotes: number }>('/api/admin/restaurar', { method: 'POST' }),
 
   /** El clima se pide una sola vez por visita y se comparte entre la vista Clima y el formulario. */
   clima: (refrescar = false) => {

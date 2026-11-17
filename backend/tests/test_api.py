@@ -58,7 +58,7 @@ def test_listado_paginado_y_filtros(cliente):
     assert cliente.get("/api/lotes", params={"buscar": "#1"}).json()["items"][0]["id"] == 1
 
 
-def test_crear_editar_borrar(cliente):
+def test_crear_editar_borrar(cliente, admin):
     r = cliente.post("/api/lotes", json=NUEVO)
     assert r.status_code == 201
     lote = r.json()
@@ -69,13 +69,13 @@ def test_crear_editar_borrar(cliente):
     assert cliente.get("/api/lotes", params={"buscar": "esperanza"}).json()["total"] == 1
 
     # editar
-    r = cliente.put(f"/api/lotes/{lote['id']}", json={**NUEVO, "cultivo": "Cacao", "rendimiento_ton_ha": 12.5})
+    r = cliente.put(f"/api/lotes/{lote['id']}", json={**NUEVO, "cultivo": "Cacao", "rendimiento_ton_ha": 12.5}, headers=admin)
     assert r.status_code == 200
     assert r.json()["cultivo"] == "Cacao"
     assert cliente.get(f"/api/lotes/{lote['id']}").json()["rendimiento_ton_ha"] == 12.5
 
     # borrar
-    assert cliente.delete(f"/api/lotes/{lote['id']}").status_code == 204
+    assert cliente.delete(f"/api/lotes/{lote['id']}", headers=admin).status_code == 204
     assert cliente.get(f"/api/lotes/{lote['id']}").status_code == 404
     assert cliente.get("/api/resumen").json()["indicadores"]["lotes"] == 5000
 
@@ -93,8 +93,8 @@ def test_validacion_en_espanol(cliente):
     assert cliente.post("/api/lotes", json=sin_mun).json()["errores"]["municipio"] == "Es obligatorio"
 
 
-def test_borrar_inexistente(cliente):
-    assert cliente.delete("/api/lotes/999999").status_code == 404
+def test_borrar_inexistente(cliente, admin):
+    assert cliente.delete("/api/lotes/999999", headers=admin).status_code == 404
 
 
 def test_clima(cliente, monkeypatch):
@@ -133,3 +133,53 @@ def test_referencia_clima(cliente):
     assert d["codigos"]["61"] == ["Lluvia ligera", "lluvia"]
     assert d["parametros"]["forecast_days"] == 7
     assert 15 <= d["lotes"]["San Gil"]["temperatura_media"] <= 33
+
+
+# ---------------------------------------------------------------- administrador
+def test_editar_y_borrar_exigen_admin(cliente, admin):
+    lote = cliente.post("/api/lotes", json=NUEVO).json()          # registrar sigue abierto
+    url = f"/api/lotes/{lote['id']}"
+    assert cliente.put(url, json=NUEVO).status_code == 401
+    assert cliente.delete(url).status_code == 401
+    assert cliente.delete(url, headers={"Authorization": "Bearer inventado"}).status_code == 401
+    assert cliente.get(url).status_code == 200                      # sigue ahí
+    assert cliente.delete(url, headers=admin).status_code == 204
+
+
+def test_ingreso_y_limite_de_intentos(cliente):
+    assert cliente.get("/api/admin/estado").json() == {"configurado": True}
+    r = cliente.post("/api/admin/ingresar", json={"contrasena": "otra"})
+    assert r.status_code == 401 and r.json()["detail"] == "Contraseña incorrecta."
+    for _ in range(4):
+        cliente.post("/api/admin/ingresar", json={"contrasena": "otra"})
+    r = cliente.post("/api/admin/ingresar", json={"contrasena": "clave-pruebas"})
+    assert r.status_code == 429                                     # bloqueado tras 5 fallos
+    from app import seguridad
+    seguridad._fallos.clear()
+    r = cliente.post("/api/admin/ingresar", json={"contrasena": "clave-pruebas"})
+    assert r.status_code == 200
+    h = {"Authorization": f"Bearer {r.json()['token']}"}
+    assert cliente.get("/api/admin/verificar", headers=h).json() == {"valido": True}
+
+
+def test_token_vencido_o_alterado():
+    from app import seguridad
+    token, _ = seguridad.crear_token("clave-pruebas")
+    assert seguridad.token_valido(token)
+    raw = __import__("base64").urlsafe_b64decode(token).decode()
+    vence, firma = raw.split(".", 1)
+    alterado = __import__("base64").urlsafe_b64encode(f"{int(vence) + 99999}.{firma}".encode()).decode()
+    assert not seguridad.token_valido(alterado)
+
+
+def test_restaurar_datos_originales(cliente, admin):
+    nuevo = cliente.post("/api/lotes", json=NUEVO).json()
+    cliente.delete("/api/lotes/1", headers=admin)
+    assert cliente.post("/api/admin/restaurar").status_code == 401
+    r = cliente.post("/api/admin/restaurar", headers=admin)
+    assert r.json() == {"lotes": 5000}
+    assert cliente.get("/api/resumen").json()["origen"] == {"historico": 5000}
+    assert cliente.get("/api/lotes/1").status_code == 200
+    assert cliente.get(f"/api/lotes/{nuevo['id']}").status_code in (200, 404)
+    ids = [x["id"] for x in cliente.get("/api/lotes", params={"orden": "recientes", "por_pagina": 5}).json()["items"]]
+    assert ids[0] == 5000

@@ -17,3 +17,6 @@ services:
         fromDatabase:
           name: agroandes-db
           property: connectionString
+      # contraseña de administrador: se escribe en el panel de Render, nunca en el código
+      - key: ADMIN_PASSWORD
+        sync: false

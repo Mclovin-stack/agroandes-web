@@ -280,3 +280,9 @@ dialog.modal form, .confirmar { padding: 22px; display: flex; flex-direction: co
 
 /* los controles dentro de un rótulo usan la letra normal, no la del rótulo */
 .rotulo select, .rotulo input { font-family: var(--f-texto); letter-spacing: normal; text-transform: none; font-weight: 400; color: var(--tinta) }
+
+/* administrador */
+.barra-sup { row-gap: 10px }
+.admin-estado { display: flex; align-items: center; gap: 8px }
+.clave-fila { display: flex; gap: 8px; align-items: center }
+.clave-fila input { flex: 1 }

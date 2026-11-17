@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
-import { api, type Opciones, type Resumen } from './api'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { api, sesion, type Opciones, type Resumen } from './api'
 import { Tooltip } from './graficos'
 import Panel from './Panel'
 import Lotes from './Lotes'
 import Clima from './Clima'
+import Ingreso from './Ingreso'
 
 type Vista = 'panel' | 'lotes' | 'clima'
 const vistaDe = (hash: string): Vista => (hash === '#lotes' ? 'lotes' : hash === '#clima' ? 'clima' : 'panel')
@@ -25,6 +26,25 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
   const [aviso, setAviso] = useState<{ texto: string; id: number } | null>(null)
+  const [esAdmin, setEsAdmin] = useState(() => sesion.token() !== null)
+  const [ingreso, setIngreso] = useState<{ abierto: boolean; motivo: string | null }>({ abierto: false, motivo: null })
+  const pendiente = useRef<(() => void) | null>(null)
+
+  // la sesión de administrador: se sigue cualquier cambio y se comprueba al abrir la página
+  useEffect(() => sesion.escuchar(t => setEsAdmin(t !== null)), [])
+  useEffect(() => { if (sesion.token()) api.verificarSesion().catch(() => sesion.poner(null)) }, [])
+
+  /** Ejecuta la acción si ya es administrador; si no, pide la contraseña y la ejecuta al entrar. */
+  const comoAdmin = useCallback((motivo: string, accion: () => void) => {
+    if (sesion.token()) { accion(); return }
+    pendiente.current = accion
+    setIngreso({ abierto: true, motivo })
+  }, [])
+
+  function salir() {
+    sesion.poner(null)
+    setAviso({ texto: 'Sesión de administrador cerrada', id: Date.now() })
+  }
 
   // navegación por #lotes, #clima o el panel
   useEffect(() => {
@@ -78,6 +98,14 @@ export default function App() {
             {enlace('lotes', '#lotes', 'Lotes')}
             {enlace('clima', '#clima', 'Clima')}
           </ul></nav>
+          {esAdmin ? (
+            <span className="admin-estado">
+              <span className="pastilla alta">Administrador</span>
+              <button type="button" className="mini" onClick={salir}>Salir</button>
+            </span>
+          ) : (
+            <button type="button" className="mini" onClick={() => setIngreso({ abierto: true, motivo: null })}>Administrador</button>
+          )}
         </header>
 
         {error && !op ? (
@@ -91,7 +119,7 @@ export default function App() {
         ) : !op || !res ? (
           <main><p className="cargando">Cargando datos de AgroAndes…</p></main>
         ) : vista === 'lotes' ? (
-          <Lotes opciones={op} version={version} onCambio={onCambio} />
+          <Lotes opciones={op} version={version} onCambio={onCambio} esAdmin={esAdmin} comoAdmin={comoAdmin} />
         ) : (
           <Panel op={op} res={res} version={version} irA={irA} />
         )}
@@ -101,6 +129,14 @@ export default function App() {
           <span>Yohiner, Carlos Manuel y Manuel · 2026</span>
         </footer>
       </div>
+      <Ingreso abierto={ingreso.abierto} motivo={ingreso.motivo}
+        onCerrar={() => { pendiente.current = null; setIngreso({ abierto: false, motivo: null }) }}
+        onIngreso={() => {
+          setIngreso({ abierto: false, motivo: null })
+          setAviso({ texto: 'Sesión de administrador iniciada', id: Date.now() })
+          const accion = pendiente.current; pendiente.current = null
+          accion?.()
+        }} />
       {aviso && <div className="toast" role="status" key={aviso.id}>✓ {aviso.texto}</div>}
       <Tooltip />
     </>
