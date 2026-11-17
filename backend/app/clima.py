@@ -57,6 +57,19 @@ def convertir(municipio: str, d: dict) -> dict:
     }
 
 
+def parametros() -> dict:
+    """Consulta a Open-Meteo para todos los municipios a la vez (la usa también el navegador como respaldo)."""
+    nombres = list(COORDENADAS)
+    return {
+        "latitude": ",".join(str(COORDENADAS[n][0]) for n in nombres),
+        "longitude": ",".join(str(COORDENADAS[n][1]) for n in nombres),
+        "current": "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,is_day",
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code",
+        "timezone": "America/Bogota",
+        "forecast_days": 7,
+    }
+
+
 _cache: dict = {"t": 0.0, "datos": None}
 _candado = asyncio.Lock()
 
@@ -66,14 +79,7 @@ async def consultar() -> dict:
         if _cache["datos"] and time.time() - _cache["t"] < DURACION_CACHE:
             return _cache["datos"]
         nombres = list(COORDENADAS)
-        params = {
-            "latitude": ",".join(str(COORDENADAS[n][0]) for n in nombres),
-            "longitude": ",".join(str(COORDENADAS[n][1]) for n in nombres),
-            "current": "temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,is_day",
-            "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code",
-            "timezone": "America/Bogota",
-            "forecast_days": 7,
-        }
+        params = parametros()
         async with httpx.AsyncClient(timeout=10) as c:
             r = await c.get(URL, params=params)
             r.raise_for_status()

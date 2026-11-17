@@ -208,6 +208,16 @@ def borrar_lote(lote_id: int, s: Sesion):
 
 
 # ---------------------------------------------------------------- clima
+def promedios_lotes(s: Session) -> dict:
+    prom = db.dataframe(s).groupby("municipio")[["temperatura_c", "precipitacion_mm"]].mean()
+    out = {}
+    for m in clima.COORDENADAS:
+        p = prom.loc[m] if m in prom.index else pd.Series(dtype=float)
+        out[m] = {"temperatura_media": analisis.num(p.get("temperatura_c"), 1),
+                  "precipitacion_media": analisis.num(p.get("precipitacion_mm"), 0)}
+    return out
+
+
 @app.get("/api/clima")
 async def ver_clima(s: Sesion):
     try:
@@ -217,14 +227,20 @@ async def ver_clima(s: Sesion):
         print("Error consultando el clima:", motivo, flush=True)
         return JSONResponse(status_code=503, content={
             "detail": "El servicio de clima no respondió. Intenta de nuevo en unos minutos.", "motivo": motivo})
-    df = db.dataframe(s)
-    prom = df.groupby("municipio")[["temperatura_c", "precipitacion_mm"]].mean()
-    out = []
-    for m in datos["municipios"]:
-        p = prom.loc[m["municipio"]] if m["municipio"] in prom.index else pd.Series(dtype=float)
-        out.append({**m, "lotes": {"temperatura_media": analisis.num(p.get("temperatura_c"), 1),
-                                   "precipitacion_media": analisis.num(p.get("precipitacion_mm"), 0)}})
-    return {**datos, "municipios": out}
+    prom = promedios_lotes(s)
+    return {**datos, "municipios": [{**m, "lotes": prom[m["municipio"]]} for m in datos["municipios"]]}
+
+
+@app.get("/api/clima/referencia")
+def referencia_clima(s: Sesion):
+    """Lo necesario para que el navegador consulte Open-Meteo directamente si el servidor no puede."""
+    return {
+        "url": clima.URL,
+        "parametros": clima.parametros(),
+        "municipios": [{"municipio": m, "lat": lat, "lon": lon} for m, (lat, lon) in clima.COORDENADAS.items()],
+        "codigos": {str(k): v for k, v in clima.CODIGOS.items()},
+        "lotes": promedios_lotes(s),
+    }
 
 
 # ---------------------------------------------------------------- frontend compilado

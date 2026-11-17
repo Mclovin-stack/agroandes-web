@@ -128,3 +128,11 @@ def test_clima_caido(cliente, monkeypatch):
 
     monkeypatch.setattr(clima, "consultar", falla)
     assert cliente.get("/api/clima").status_code == 503
+
+
+def test_referencia_clima(cliente):
+    d = cliente.get("/api/clima/referencia").json()
+    assert len(d["municipios"]) == 6
+    assert d["codigos"]["61"] == ["Lluvia ligera", "lluvia"]
+    assert d["parametros"]["forecast_days"] == 7
+    assert 15 <= d["lotes"]["San Gil"]["temperatura_media"] <= 33

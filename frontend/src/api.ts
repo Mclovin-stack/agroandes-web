@@ -103,6 +103,43 @@ const consulta = (o: Record<string, string | number>) => {
 
 let climaEnCurso: Promise<Clima> | null = null
 
+interface ReferenciaClima {
+  url: string; parametros: Record<string, string | number>
+  municipios: { municipio: string; lat: number; lon: number }[]
+  codigos: Record<string, [string, string]>
+  lotes: Record<string, ClimaMunicipio['lotes']>
+}
+
+/** Respaldo: si el servidor no logra consultar el clima, el navegador lo pide directamente a Open-Meteo. */
+async function climaDesdeNavegador(): Promise<Clima> {
+  const ref = await pedir<ReferenciaClima>('/api/clima/referencia')
+  const q = new URLSearchParams(Object.entries(ref.parametros).map(([k, v]) => [k, String(v)]))
+  const r = await fetch(`${ref.url}?${q}`)
+  if (!r.ok) throw new ErrorApi('El servicio de clima no está disponible en este momento. Intenta de nuevo en unos minutos.', r.status)
+  const crudo = await r.json()
+  const lista: any[] = Array.isArray(crudo) ? crudo : [crudo]
+  const desc = (c: number | null | undefined): [string, string] => ref.codigos[String(c)] ?? ['Sin dato', 'nubes']
+  return {
+    fuente: 'Open-Meteo',
+    consultado: new Date().toISOString(),
+    municipios: ref.municipios.map((m, i) => {
+      const d = lista[i], a = d.current, dia = d.daily
+      const [descripcion, icono] = desc(a.weather_code)
+      return {
+        ...m,
+        actual: { hora: a.time, temperatura: a.temperature_2m, sensacion: a.apparent_temperature, humedad: a.relative_humidity_2m,
+          lluvia_mm: a.precipitation, viento_kmh: a.wind_speed_10m, es_dia: Boolean(a.is_day ?? 1), descripcion, icono },
+        diario: (dia.time as string[]).map((fecha, j) => {
+          const [dd, di] = desc(dia.weather_code[j])
+          return { fecha, maxima: dia.temperature_2m_max[j], minima: dia.temperature_2m_min[j], lluvia_mm: dia.precipitation_sum[j],
+            prob_lluvia: dia.precipitation_probability_max[j], descripcion: dd, icono: di }
+        }),
+        lotes: ref.lotes[m.municipio] ?? { temperatura_media: null, precipitacion_media: null },
+      }
+    }),
+  }
+}
+
 export const api = {
   opciones: (signal?: AbortSignal) => pedir<Opciones>('/api/opciones', { signal }),
   resumen: (signal?: AbortSignal) => pedir<Resumen>('/api/resumen', { signal }),
@@ -117,7 +154,9 @@ export const api = {
 
   /** El clima se pide una sola vez por visita y se comparte entre la vista Clima y el formulario. */
   clima: (refrescar = false) => {
-    if (!climaEnCurso || refrescar) climaEnCurso = pedir<Clima>('/api/clima').catch(e => { climaEnCurso = null; throw e })
+    if (!climaEnCurso || refrescar) climaEnCurso = pedir<Clima>('/api/clima')
+      .catch(e => { if (e instanceof ErrorApi && e.estado === 503) return climaDesdeNavegador(); throw e })
+      .catch(e => { climaEnCurso = null; throw e })
     return climaEnCurso
   },
 }
