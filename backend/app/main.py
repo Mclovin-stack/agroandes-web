@@ -63,7 +63,7 @@ Sesion = Annotated[Session, Depends(db.sesion)]
 
 @app.get("/api/salud")
 def salud(s: Sesion):
-    return {"estado": "ok", "lotes": s.scalar(select(func.count(db.Lote.id)))}
+    return {"estado": "ok", "lotes": s.scalar(select(func.count(db.Lote.id))), "base": db.engine.dialect.name}
 
 
 # ---------------------------------------------------------------- análisis
@@ -212,8 +212,11 @@ def borrar_lote(lote_id: int, s: Sesion):
 async def ver_clima(s: Sesion):
     try:
         datos = await clima.consultar()
-    except (httpx.HTTPError, KeyError, ValueError):
-        raise HTTPException(503, "El servicio de clima no respondió. Intenta de nuevo en unos minutos.")
+    except (httpx.HTTPError, KeyError, ValueError) as e:
+        motivo = f"{type(e).__name__}: {e}"[:300]
+        print("Error consultando el clima:", motivo, flush=True)
+        return JSONResponse(status_code=503, content={
+            "detail": "El servicio de clima no respondió. Intenta de nuevo en unos minutos.", "motivo": motivo})
     df = db.dataframe(s)
     prom = df.groupby("municipio")[["temperatura_c", "precipitacion_mm"]].mean()
     out = []
