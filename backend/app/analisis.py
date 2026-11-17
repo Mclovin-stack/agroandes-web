@@ -39,16 +39,6 @@ def filtrar(df: pd.DataFrame, municipio=None, cultivo=None, riego=None, anio=Non
     return df[m]
 
 
-def opciones(df: pd.DataFrame) -> dict:
-    return {
-        "municipios": sorted(df["municipio"].unique().tolist()),
-        "cultivos": sorted(df["cultivo"].unique().tolist()),
-        "riegos": [{"valor": v, "nombre": RIEGO.get(v, v)} for v in sorted(df["sistema_riego"].unique())],
-        "anios": sorted(int(a) for a in df["anio"].unique()),
-        "variables": [{"clave": k, "nombre": v["nombre"], "unidad": v["unidad"]} for k, v in VARIABLES.items()],
-    }
-
-
 def indicadores(df: pd.DataFrame) -> dict:
     return {
         "lotes": int(len(df)),
@@ -96,18 +86,3 @@ def por_variable(df: pd.DataFrame, clave: str) -> dict:
     par = df[[col, REND]].dropna()
     r = par[col].corr(par[REND]) if len(par) >= 10 else None
     return {"clave": clave, "nombre": v["nombre"], "unidad": v["unidad"], "tramos": tramos, "correlacion": num(r, 3)}
-
-
-def correlaciones(df: pd.DataFrame) -> list[dict]:
-    out = []
-    for clave, v in VARIABLES.items():
-        par = df[[v["col"], REND]].dropna()
-        out.append({"clave": clave, "nombre": v["nombre"], "r": num(par[v["col"]].corr(par[REND]), 3)})
-    return out
-
-
-def rangos(df: pd.DataFrame) -> list[dict]:
-    filas = [(v["nombre"], v["col"], v["unidad"]) for v in VARIABLES.values()]
-    filas.append(("Rendimiento", REND, "ton/ha"))
-    return [{"nombre": n, "unidad": u, "min": num(df[c].min()), "max": num(df[c].max()), "media": num(df[c].mean())}
-            for n, c, u in filas]

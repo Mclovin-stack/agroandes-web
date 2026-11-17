@@ -7,10 +7,9 @@ NUEVO = {
 }
 
 
-def test_limpieza_coincide_con_informe(cliente):
+def test_resumen_con_datos_limpios(cliente):
     r = cliente.get("/api/resumen").json()
-    cal = r["calidad"]
-    assert (cal["filas"], cal["duplicadas"], cal["lotes_unicos"]) == (5100, 100, 5000)
+    assert "calidad" not in r
     ind = r["indicadores"]
     assert ind["lotes"] == 5000
     assert ind["lotes_con_rendimiento"] == 4782
@@ -46,10 +45,8 @@ def test_valores_invalidos(cliente):
     assert cliente.get("/api/exploracion", params={"variable": "altitud"}).status_code == 422
 
 
-def test_modelos(cliente):
-    m = cliente.get("/api/modelos").json()
-    assert m["regresion"]["resultados"][0]["rmse"] == 5.07
-    assert len(m["kmeans"]["grupos"]) == 4
+def test_modelos_ya_no_existe(cliente):
+    assert cliente.get("/api/modelos").status_code == 404
 
 
 def test_listado_paginado_y_filtros(cliente):

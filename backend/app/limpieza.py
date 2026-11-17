@@ -37,28 +37,6 @@ def limpiar_agrodata(d: pd.DataFrame) -> pd.DataFrame:
 
 
 def cargar(ruta: Path = RUTA_CSV) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Devuelve (datos originales, datos limpios)."""
+    """Devuelve (datos originales, datos limpios). Los limpios se cargan en la base de datos."""
     crudo = pd.read_csv(ruta, encoding="utf-8-sig")
     return crudo, limpiar_agrodata(crudo)
-
-
-def informe_calidad(crudo: pd.DataFrame) -> dict:
-    """Cuenta los problemas del archivo original que corrige la limpieza."""
-    unicos = crudo.drop_duplicates()
-    fert_txt = crudo["fertilizante_kg"].astype(str)
-    columnas_nulos = ["area_ha", "precipitacion_mm", "temperatura_c", "fertilizante_kg", "rendimiento_ton_ha"]
-    return {
-        "filas": int(len(crudo)),
-        "duplicadas": int(crudo.duplicated().sum()),
-        "lotes_unicos": int(len(unicos)),
-        "variantes_cultivo": int(crudo["cultivo"].nunique()),
-        "ejemplos_cultivo": sorted(crudo["cultivo"].unique().tolist()),
-        "fertilizante_con_kg": int(fert_txt.str.contains("kg", regex=False).sum()),
-        "areas_no_positivas": int((unicos["area_ha"] <= 0).sum()),
-        "ph_fuera_de_rango": int(((unicos["ph_suelo"] < 3) | (unicos["ph_suelo"] > 10)).sum()),
-        "ph_min": float(unicos["ph_suelo"].min()),
-        "ph_max": float(unicos["ph_suelo"].max()),
-        "rendimientos_mayores_20": int((unicos["rendimiento_ton_ha"] > 20).sum()),
-        "rendimiento_max": round(float(unicos["rendimiento_ton_ha"].max()), 1),
-        "nulos": {c: int(unicos[c].isna().sum()) for c in columnas_nulos},
-    }

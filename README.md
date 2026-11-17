@@ -1,4 +1,4 @@
-# Página web AgroAndes · Caso 2 AgroData
+# Página web AgroAndes
 
 Aplicación web del análisis de productividad agrícola de AgroAndes (Santander).
 Autores: Yohiner, Carlos Manuel y Manuel.
@@ -7,9 +7,9 @@ Autores: Yohiner, Carlos Manuel y Manuel.
 
 | Parte | Tecnología | Para qué |
 |---|---|---|
-| Backend | Python 3.13, **FastAPI**, **pandas**, Uvicorn | Lee el CSV, aplica la misma limpieza de los notebooks y calcula los datos de los gráficos |
+| Backend | Python 3.13, **FastAPI**, **pandas**, Uvicorn | Guarda los lotes, valida los datos, calcula los gráficos y consulta el clima |
 | Frontend | **React 19**, **TypeScript**, **Vite** | Interfaz con filtros, gráficos SVG propios y diseño adaptable a celular |
-| Pruebas | pytest | Verifican que la API devuelve las cifras del informe (5.000 lotes, 4.782 con rendimiento, 9,27 ton/ha) |
+| Pruebas | pytest | Verifican la carga de datos, el registro, edición y borrado de lotes, la validación y el clima |
 
 ## Estructura
 
@@ -21,21 +21,19 @@ pagina-web/
 │   │   ├── db.py           # base de datos de lotes (SQLite local, PostgreSQL en Render)
 │   │   ├── esquemas.py     # validación de lotes y mensajes en español
 │   │   ├── clima.py        # clima en vivo desde Open-Meteo
-│   │   ├── limpieza.py     # función limpiar_agrodata (igual a los notebooks)
+│   │   ├── limpieza.py     # limpieza del CSV antes de cargarlo en la base de datos
 │   │   ├── analisis.py     # indicadores, agrupaciones, histograma, correlaciones
-│   │   └── modelos.json    # resultados de los modelos (tomados del informe)
 │   ├── data/02_AgroData_Productividad_Agricola.csv
 │   ├── tests/test_api.py
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── App.tsx         # navegación entre Análisis, Lotes y Clima
-│   │   ├── Analisis.tsx    # secciones del análisis
+│   │   ├── App.tsx         # navegación entre Panel, Lotes y Clima
+│   │   ├── Panel.tsx       # cifras generales y explorador de rendimiento
 │   │   ├── Lotes.tsx       # tabla de lotes y confirmación de borrado
 │   │   ├── FormLote.tsx    # formulario para crear y editar lotes
 │   │   ├── Clima.tsx       # clima actual y pronóstico
 │   │   ├── Explorador.tsx  # filtros y gráficos que consultan la API
-│   │   ├── Modelos.tsx     # resultados de los tres notebooks
 │   │   ├── graficos.tsx    # barras, línea, histograma y tooltip
 │   │   ├── api.ts          # tipos y llamadas al backend
 │   │   └── estilos.css     # diseño, modo claro y oscuro
@@ -45,7 +43,7 @@ pagina-web/
 
 ## Qué se puede hacer en la página
 
-- **Análisis**: contexto, limpieza de datos, explorador con filtros, resultados de los modelos, hallazgo y recomendaciones. Los gráficos se recalculan con cada lote nuevo, editado o borrado.
+- **Panel**: cifras generales de los lotes y explorador de rendimiento con filtros por municipio, cultivo, riego y año. Los gráficos se recalculan con cada lote nuevo, editado o borrado.
 - **Lotes**: registrar terrenos nuevos, editarlos y borrarlos (con confirmación). Tabla con búsqueda por nombre o número, filtros, orden y paginación. El formulario valida con las mismas reglas de la limpieza (área positiva, pH entre 3 y 10, rendimiento hasta 20 ton/ha), calcula el rendimiento a partir de producción y área, y puede llenar la temperatura con la del día.
 - **Clima**: temperatura, humedad, lluvia y viento actuales de los 6 municipios, pronóstico de 7 días y comparación con la temperatura media registrada en los lotes. Fuente: Open-Meteo.
 
@@ -59,9 +57,8 @@ Los 5.000 lotes del CSV se cargan limpios en la base de datos la primera vez que
 |---|---|
 | `GET /api/salud` | Estado del servidor y número de lotes |
 | `GET /api/opciones` | Municipios, cultivos, riegos, años y variables para los filtros |
-| `GET /api/resumen` | Problemas de calidad del CSV, rangos, correlaciones e histograma |
+| `GET /api/resumen` | Indicadores generales e histograma del rendimiento |
 | `GET /api/exploracion?municipio=&cultivo=&riego=&anio=&variable=` | Indicadores y gráficos según los filtros |
-| `GET /api/modelos` | Resultados de regresión, XGBoost, clasificación y K-Means |
 | `GET /api/lotes?buscar=&municipio=&cultivo=&riego=&origen=&orden=&pagina=&por_pagina=` | Lista paginada de lotes |
 | `GET /api/lotes/{id}` | Un lote |
 | `POST /api/lotes` | Crea un lote (errores de validación en español, por campo) |
@@ -131,5 +128,4 @@ En el plan gratuito el servicio se duerme tras 15 minutos sin visitas; la primer
 
 ## Notas
 
-- Los resultados de los modelos vienen del informe escrito, porque los notebooks se ejecutaron en Colab y no guardaron sus salidas.
 - Para analizar datos nuevos, reemplazar `backend/data/02_AgroData_Productividad_Agricola.csv` por otro con las mismas columnas y reiniciar el servidor.

@@ -3,7 +3,6 @@
 Ejecutar en desarrollo (desde la carpeta backend):
     uvicorn app.main:app --reload
 """
-import json
 from contextlib import asynccontextmanager
 from functools import lru_cache
 from pathlib import Path
@@ -21,7 +20,7 @@ from sqlalchemy.orm import Session
 
 from . import analisis, clima, db
 from .esquemas import CAMPOS, CULTIVOS, MUNICIPIOS, RIEGOS, LoteEntrada, LoteSalida, PaginaLotes, mensaje
-from .limpieza import cargar, informe_calidad
+from .limpieza import cargar
 
 BASE = Path(__file__).resolve().parent
 FRONT_DIST = BASE.parent.parent / "frontend" / "dist"
@@ -40,7 +39,7 @@ async def ciclo(_: FastAPI):
 
 
 app = FastAPI(title="API AgroAndes", version="2.0.0", lifespan=ciclo,
-              description="Datos, gestión de lotes y clima del Caso 2 AgroData: productividad agrícola en Santander.")
+              description="Gestión de lotes, análisis de rendimiento y clima de AgroAndes (Santander).")
 
 # En desarrollo el frontend corre en otro puerto (Vite, 5173)
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -82,16 +81,12 @@ def opciones(s: Sesion):
 
 @app.get("/api/resumen")
 def resumen(s: Sesion):
-    crudo, _ = csv_original()
     df = db.dataframe(s)
     periodo = None
     if len(df):
         periodo = {"desde": df["fecha_cosecha"].min().strftime("%Y-%m"), "hasta": df["fecha_cosecha"].max().strftime("%Y-%m")}
     return {
-        "calidad": informe_calidad(crudo),
         "indicadores": analisis.indicadores(df),
-        "rangos": analisis.rangos(df),
-        "correlaciones": analisis.correlaciones(df),
         "histograma": analisis.histograma(df),
         "periodo": periodo,
         "origen": {k: int(v) for k, v in s.execute(select(db.Lote.origen, func.count()).group_by(db.Lote.origen)).all()},
@@ -116,11 +111,6 @@ def exploracion(
         "por_trimestre": analisis.por_trimestre(df),
         "por_variable": analisis.por_variable(df, variable),
     }
-
-
-@app.get("/api/modelos")
-def modelos():
-    return json.loads((BASE / "modelos.json").read_text(encoding="utf-8"))
 
 
 # ---------------------------------------------------------------- lotes (CRUD)

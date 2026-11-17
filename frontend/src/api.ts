@@ -15,14 +15,7 @@ export interface Opciones {
 export type ClaveVariable = 'fertilizante' | 'precipitacion' | 'temperatura' | 'ph' | 'area'
 
 export interface Resumen {
-  calidad: {
-    filas: number; duplicadas: number; lotes_unicos: number; variantes_cultivo: number; ejemplos_cultivo: string[]
-    fertilizante_con_kg: number; areas_no_positivas: number; ph_fuera_de_rango: number; ph_min: number; ph_max: number
-    rendimientos_mayores_20: number; rendimiento_max: number; nulos: Record<string, number>
-  }
   indicadores: Indicadores
-  rangos: { nombre: string; unidad: string; min: number; max: number; media: number }[]
-  correlaciones: { clave: string; nombre: string; r: number }[]
   histograma: { desde: number; hasta: number; lotes: number }[]
   periodo: { desde: string; hasta: string } | null
   origen: Record<string, number>
@@ -33,17 +26,6 @@ export interface Exploracion {
   por_cultivo: Grupo[]; por_municipio: Grupo[]; por_riego: Grupo[]
   por_trimestre: { anio: number; trimestre: number; rendimiento: number | null; lotes: number }[]
   por_variable: { clave: ClaveVariable; nombre: string; unidad: string; tramos: Tramo[]; correlacion: number | null }
-}
-
-export interface Modelos {
-  fuente: string
-  regresion: { notebook: string; lotes_prueba: number; particion: string
-    resultados: { modelo: string; r2: number; rmse: number; mae: number; base?: boolean }[] }
-  boosting: { notebook: string; particion: string; nota_cv: string
-    regresion: { modelo: string; rmse: number; r2: number; base?: boolean }[]
-    clasificacion: { modelo: string; exactitud: number; base?: boolean }[] }
-  kmeans: { notebook: string; k: number; silueta: number; silueta_rango: string
-    grupos: { grupo: number; fertilizante: number; ph: number; precipitacion: number; rendimiento: number; lectura: string }[] }
 }
 
 export interface Filtros { municipio: string; cultivo: string; riego: string; anio: string }
@@ -143,7 +125,6 @@ async function climaDesdeNavegador(): Promise<Clima> {
 export const api = {
   opciones: (signal?: AbortSignal) => pedir<Opciones>('/api/opciones', { signal }),
   resumen: (signal?: AbortSignal) => pedir<Resumen>('/api/resumen', { signal }),
-  modelos: (signal?: AbortSignal) => pedir<Modelos>('/api/modelos', { signal }),
   exploracion: (f: Filtros, variable: ClaveVariable, signal?: AbortSignal) =>
     pedir<Exploracion>(`/api/exploracion?${consulta({ ...f, variable })}`, { signal }),
 
