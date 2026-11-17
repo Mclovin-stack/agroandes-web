@@ -18,6 +18,9 @@ pagina-web/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py         # API (rutas /api/...) y entrega del frontend compilado
+│   │   ├── db.py           # base de datos de lotes (SQLite local, PostgreSQL en Render)
+│   │   ├── esquemas.py     # validación de lotes y mensajes en español
+│   │   ├── clima.py        # clima en vivo desde Open-Meteo
 │   │   ├── limpieza.py     # función limpiar_agrodata (igual a los notebooks)
 │   │   ├── analisis.py     # indicadores, agrupaciones, histograma, correlaciones
 │   │   └── modelos.json    # resultados de los modelos (tomados del informe)
@@ -26,7 +29,11 @@ pagina-web/
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── App.tsx         # secciones de la página
+│   │   ├── App.tsx         # navegación entre Análisis, Lotes y Clima
+│   │   ├── Analisis.tsx    # secciones del análisis
+│   │   ├── Lotes.tsx       # tabla de lotes y confirmación de borrado
+│   │   ├── FormLote.tsx    # formulario para crear y editar lotes
+│   │   ├── Clima.tsx       # clima actual y pronóstico
 │   │   ├── Explorador.tsx  # filtros y gráficos que consultan la API
 │   │   ├── Modelos.tsx     # resultados de los tres notebooks
 │   │   ├── graficos.tsx    # barras, línea, histograma y tooltip
@@ -36,15 +43,31 @@ pagina-web/
 └── iniciar.bat             # arranca todo en Windows con doble clic
 ```
 
+## Qué se puede hacer en la página
+
+- **Análisis**: contexto, limpieza de datos, explorador con filtros, resultados de los modelos, hallazgo y recomendaciones. Los gráficos se recalculan con cada lote nuevo, editado o borrado.
+- **Lotes**: registrar terrenos nuevos, editarlos y borrarlos (con confirmación). Tabla con búsqueda por nombre o número, filtros, orden y paginación. El formulario valida con las mismas reglas de la limpieza (área positiva, pH entre 3 y 10, rendimiento hasta 20 ton/ha), calcula el rendimiento a partir de producción y área, y puede llenar la temperatura con la del día.
+- **Clima**: temperatura, humedad, lluvia y viento actuales de los 6 municipios, pronóstico de 7 días y comparación con la temperatura media registrada en los lotes. Fuente: Open-Meteo.
+
+## Base de datos
+
+Los 5.000 lotes del CSV se cargan limpios en la base de datos la primera vez que arranca el servidor. En local se usa SQLite (`backend/agroandes.db`); en Render, PostgreSQL mediante la variable `DATABASE_URL`. Para volver a los datos originales en local, basta con borrar `backend/agroandes.db` y reiniciar.
+
 ## API
 
 | Ruta | Devuelve |
 |---|---|
-| `GET /api/salud` | Estado del servidor |
+| `GET /api/salud` | Estado del servidor y número de lotes |
 | `GET /api/opciones` | Municipios, cultivos, riegos, años y variables para los filtros |
 | `GET /api/resumen` | Problemas de calidad del CSV, rangos, correlaciones e histograma |
 | `GET /api/exploracion?municipio=&cultivo=&riego=&anio=&variable=` | Indicadores y gráficos según los filtros |
 | `GET /api/modelos` | Resultados de regresión, XGBoost, clasificación y K-Means |
+| `GET /api/lotes?buscar=&municipio=&cultivo=&riego=&origen=&orden=&pagina=&por_pagina=` | Lista paginada de lotes |
+| `GET /api/lotes/{id}` | Un lote |
+| `POST /api/lotes` | Crea un lote (errores de validación en español, por campo) |
+| `PUT /api/lotes/{id}` | Edita un lote |
+| `DELETE /api/lotes/{id}` | Borra un lote |
+| `GET /api/clima` | Clima actual y pronóstico de 7 días por municipio |
 
 Con el servidor encendido, la documentación interactiva está en http://localhost:8000/docs
 
@@ -102,7 +125,9 @@ El proyecto incluye `Dockerfile` y `render.yaml`. Render compila el frontend, in
 2. En https://dashboard.render.com elegir **New → Blueprint**, conectar el repositorio y pulsar **Apply**.
 3. Cuando termine, la página queda en `https://agroandes-XXXX.onrender.com`. Cada `git push` la vuelve a publicar.
 
-En el plan gratuito el servicio se duerme tras 15 minutos sin visitas; la primera visita después tarda cerca de un minuto en despertar.
+`render.yaml` también crea una base PostgreSQL gratuita (`agroandes-db`) y se la pasa al servidor en `DATABASE_URL`, para que los lotes registrados no se pierdan cuando el servidor se reinicia.
+
+En el plan gratuito el servicio se duerme tras 15 minutos sin visitas; la primera visita después tarda cerca de un minuto en despertar. La base de datos gratuita de Render tiene fecha de vencimiento: revísala en el panel de la base de datos.
 
 ## Notas
 

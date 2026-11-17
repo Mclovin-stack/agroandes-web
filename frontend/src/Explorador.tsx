@@ -5,7 +5,7 @@ import { n0, n1, n2 } from './formato'
 
 const SIN_FILTROS: Filtros = { municipio: '', cultivo: '', riego: '', anio: '' }
 
-export default function Explorador({ opciones }: { opciones: Opciones }) {
+export default function Explorador({ opciones, version }: { opciones: Opciones; version: number }) {
   const [filtros, setFiltros] = useState<Filtros>(SIN_FILTROS)
   const [variable, setVariable] = useState<ClaveVariable>('fertilizante')
   const [datos, setDatos] = useState<Exploracion | null>(null)
@@ -20,7 +20,7 @@ export default function Explorador({ opciones }: { opciones: Opciones }) {
       .catch(e => { if (e.name !== 'AbortError') setError('No se pudieron cargar los datos del explorador. Revisa que el backend esté encendido.') })
       .finally(() => { if (!ctl.signal.aborted) setCargando(false) })
     return () => ctl.abort()
-  }, [filtros, variable])
+  }, [filtros, variable, version])
 
   const cambiar = (k: keyof Filtros) => (e: React.ChangeEvent<HTMLSelectElement>) => setFiltros(f => ({ ...f, [k]: e.target.value }))
   const hayFiltros = Object.values(filtros).some(Boolean)

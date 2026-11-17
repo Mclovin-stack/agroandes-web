@@ -24,7 +24,8 @@ export interface Resumen {
   rangos: { nombre: string; unidad: string; min: number; max: number; media: number }[]
   correlaciones: { clave: string; nombre: string; r: number }[]
   histograma: { desde: number; hasta: number; lotes: number }[]
-  periodo: { desde: string; hasta: string }
+  periodo: { desde: string; hasta: string } | null
+  origen: Record<string, number>
 }
 
 export interface Exploracion {
@@ -47,19 +48,76 @@ export interface Modelos {
 
 export interface Filtros { municipio: string; cultivo: string; riego: string; anio: string }
 
-async function pedir<T>(ruta: string, signal?: AbortSignal): Promise<T> {
-  const r = await fetch(ruta, { signal })
-  if (!r.ok) throw new Error(`El servidor respondió ${r.status} en ${ruta}`)
-  return r.json() as Promise<T>
+// ---- lotes
+export interface LoteDatos {
+  nombre: string | null; municipio: string; cultivo: string; sistema_riego: string; fecha_cosecha: string
+  area_ha: number | null; precipitacion_mm: number | null; temperatura_c: number | null; ph_suelo: number | null
+  fertilizante_kg: number | null; produccion_ton: number | null; rendimiento_ton_ha: number | null
+}
+export interface Lote extends LoteDatos {
+  id: number; origen: 'historico' | 'registrado'; creado: string | null; actualizado: string | null
+}
+export interface PaginaLotes { total: number; pagina: number; por_pagina: number; items: Lote[] }
+export interface ConsultaLotes {
+  buscar: string; municipio: string; cultivo: string; riego: string; origen: string
+  orden: string; pagina: number; por_pagina: number
 }
 
+// ---- clima
+export interface DiaClima { fecha: string; maxima: number; minima: number; lluvia_mm: number; prob_lluvia: number | null; descripcion: string; icono: string }
+export interface ClimaMunicipio {
+  municipio: string; lat: number; lon: number
+  actual: { hora: string; temperatura: number; sensacion: number; humedad: number; lluvia_mm: number; viento_kmh: number; es_dia: boolean; descripcion: string; icono: string }
+  diario: DiaClima[]
+  lotes: { temperatura_media: number | null; precipitacion_media: number | null }
+}
+export interface Clima { fuente: string; consultado: string; municipios: ClimaMunicipio[] }
+
+/** Error de la API con los mensajes por campo (cuando el servidor rechaza un formulario). */
+export class ErrorApi extends Error {
+  constructor(mensaje: string, public estado: number, public errores: Record<string, string> = {}) { super(mensaje) }
+}
+
+async function pedir<T>(ruta: string, opciones: RequestInit = {}): Promise<T> {
+  let r: Response
+  try {
+    r = await fetch(ruta, { ...opciones, headers: { 'Content-Type': 'application/json', ...opciones.headers } })
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw e
+    throw new ErrorApi('No hay conexión con el servidor. Revisa tu internet e intenta de nuevo.', 0)
+  }
+  if (r.status === 204) return undefined as T
+  const cuerpo = await r.json().catch(() => ({}))
+  if (!r.ok) {
+    const detalle = typeof cuerpo.detail === 'string' ? cuerpo.detail : `El servidor respondió ${r.status}`
+    throw new ErrorApi(detalle, r.status, cuerpo.errores ?? {})
+  }
+  return cuerpo as T
+}
+
+const consulta = (o: Record<string, string | number>) => {
+  const q = new URLSearchParams()
+  for (const [k, v] of Object.entries(o)) if (v !== '' && v !== undefined) q.set(k, String(v))
+  return q.toString()
+}
+
+let climaEnCurso: Promise<Clima> | null = null
+
 export const api = {
-  opciones: (s?: AbortSignal) => pedir<Opciones>('/api/opciones', s),
-  resumen: (s?: AbortSignal) => pedir<Resumen>('/api/resumen', s),
-  modelos: (s?: AbortSignal) => pedir<Modelos>('/api/modelos', s),
-  exploracion: (f: Filtros, variable: ClaveVariable, s?: AbortSignal) => {
-    const q = new URLSearchParams({ variable })
-    for (const [k, v] of Object.entries(f)) if (v) q.set(k, v)
-    return pedir<Exploracion>(`/api/exploracion?${q}`, s)
+  opciones: (signal?: AbortSignal) => pedir<Opciones>('/api/opciones', { signal }),
+  resumen: (signal?: AbortSignal) => pedir<Resumen>('/api/resumen', { signal }),
+  modelos: (signal?: AbortSignal) => pedir<Modelos>('/api/modelos', { signal }),
+  exploracion: (f: Filtros, variable: ClaveVariable, signal?: AbortSignal) =>
+    pedir<Exploracion>(`/api/exploracion?${consulta({ ...f, variable })}`, { signal }),
+
+  lotes: (c: ConsultaLotes, signal?: AbortSignal) => pedir<PaginaLotes>(`/api/lotes?${consulta({ ...c })}`, { signal }),
+  crearLote: (d: LoteDatos) => pedir<Lote>('/api/lotes', { method: 'POST', body: JSON.stringify(d) }),
+  editarLote: (id: number, d: LoteDatos) => pedir<Lote>(`/api/lotes/${id}`, { method: 'PUT', body: JSON.stringify(d) }),
+  borrarLote: (id: number) => pedir<void>(`/api/lotes/${id}`, { method: 'DELETE' }),
+
+  /** El clima se pide una sola vez por visita y se comparte entre la vista Clima y el formulario. */
+  clima: (refrescar = false) => {
+    if (!climaEnCurso || refrescar) climaEnCurso = pedir<Clima>('/api/clima').catch(e => { climaEnCurso = null; throw e })
+    return climaEnCurso
   },
 }

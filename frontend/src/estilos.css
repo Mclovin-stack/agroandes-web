@@ -4,6 +4,7 @@
   --fondo: #f1f4ec; --superficie: #fbfcf8; --hundido: #e7ece1; --linea: #d7ded0;
   --tinta: #16201a; --tinta2: #435047; --tinta3: #66726a;
   --hoja: #2d6a43; --hoja-suave: #d5e6d7; --maiz: #b06f12; --maiz-suave: #f3e3c4;
+  --peligro: #b3261e; --peligro-suave: #f8dedb; --cielo: #3b7fc4;
   --f-titulo: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
   --f-texto: 'Source Sans 3', 'Segoe UI', system-ui, sans-serif;
   --f-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
@@ -14,6 +15,7 @@
     --fondo: #0e1410; --superficie: #161e18; --hundido: #1f2921; --linea: #2b372e;
     --tinta: #edf2ea; --tinta2: #bac5bb; --tinta3: #8d998f;
     --hoja: #62b07f; --hoja-suave: #22382a; --maiz: #e3a440; --maiz-suave: #3a2d15;
+    --peligro: #f2867c; --peligro-suave: #3d1d1a; --cielo: #7db3ea;
   }
 }
 :root[data-theme="dark"] {
@@ -21,6 +23,7 @@
   --fondo: #0e1410; --superficie: #161e18; --hundido: #1f2921; --linea: #2b372e;
   --tinta: #edf2ea; --tinta2: #bac5bb; --tinta3: #8d998f;
   --hoja: #62b07f; --hoja-suave: #22382a; --maiz: #e3a440; --maiz-suave: #3a2d15;
+    --peligro: #f2867c; --peligro-suave: #3d1d1a; --cielo: #7db3ea;
 }
 
 * { box-sizing: border-box }
@@ -178,3 +181,102 @@ svg .texto-prom { fill: var(--tinta2); font-size: 12px }
   select { min-width: 0; width: 100% }
   .filtros label { flex: 1 1 140px }
 }
+
+/* ---------- navegación y botones ---------- */
+nav a[aria-current="page"] { color: var(--hoja); text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 2px }
+.acciones { display: flex; flex-wrap: wrap; gap: 10px }
+button.primario { background: var(--hoja); border-color: var(--hoja); color: var(--superficie) }
+button.primario:hover:not(:disabled) { border-color: var(--tinta); filter: brightness(1.08) }
+button.grande { min-height: 48px; padding: 10px 20px; font-size: 16px; align-self: flex-end }
+button.mini { min-height: 32px; padding: 4px 10px; font-size: 14px }
+button.peligro { color: var(--peligro) }
+button.peligro:hover:not(:disabled) { border-color: var(--peligro) }
+button.peligro-lleno { background: var(--peligro); border-color: var(--peligro); color: var(--superficie) }
+.cabeza-fila { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end; justify-content: space-between }
+.oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0) }
+input { font: inherit; font-size: 15px; color: var(--tinta); background: var(--fondo); border: 1px solid var(--linea); border-radius: 8px; padding: 8px 12px; min-height: 42px; width: 100%; min-width: 0 }
+input:hover { border-color: var(--tinta3) }
+input[aria-invalid="true"], select[aria-invalid="true"] { border-color: var(--peligro); box-shadow: 0 0 0 1px var(--peligro) }
+.busqueda { flex: 1 1 240px }
+.atenuado { opacity: .55; transition: opacity .15s }
+
+/* ---------- tabla de lotes ---------- */
+.tabla-lotes { font-size: 14px }
+.tabla-lotes th, .tabla-lotes td { padding: 9px 10px; white-space: nowrap }
+.tabla-lotes td:nth-child(2) { white-space: normal; min-width: 140px; max-width: 220px }
+.tabla-lotes tbody tr:hover td { background: var(--fondo) }
+.tabla-lotes tr.resaltada td { background: var(--hoja-suave) }
+.acciones-fila { display: flex; gap: 6px; justify-content: flex-end }
+.vacio-lotes { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 36px 0; color: var(--tinta2) }
+.paginacion { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between }
+.pag-botones { display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+.pag-actual { font-size: 14px; color: var(--tinta2); padding: 0 6px }
+
+/* ---------- ventanas (formulario y confirmación) ---------- */
+dialog.modal { border: 1px solid var(--linea); border-radius: 16px; background: var(--superficie); color: var(--tinta); padding: 0;
+  width: min(760px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto }
+dialog.modal.pequeno { width: min(460px, calc(100vw - 24px)) }
+dialog.modal::backdrop { background: rgb(10 16 12 / .55) }
+dialog.modal form, .confirmar { padding: 22px; display: flex; flex-direction: column; gap: 16px }
+.modal-cab { display: flex; justify-content: space-between; align-items: center; gap: 12px }
+.modal-cab h2, .confirmar h2 { font-size: 24px }
+.cerrar { min-height: 38px; width: 38px; padding: 0; font-size: 22px; line-height: 1 }
+.modal-pie { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px }
+.campo { display: flex; flex-direction: column; gap: 5px; font-size: 15px; font-weight: 600; color: var(--tinta2); min-width: 0 }
+.campo select { min-width: 0; width: 100% }
+.ancho2 { grid-column: 1 / -1 }
+.opc { font-weight: 400; color: var(--tinta3); font-size: 13px }
+.campo-error { font-size: 13px; font-weight: 600; color: var(--peligro) }
+.sugerencia { align-self: flex-start; min-height: 30px; padding: 3px 10px; font-size: 13px; font-weight: 600; background: var(--hoja-suave); border-color: transparent; color: var(--tinta) }
+
+/* ---------- aviso flotante ---------- */
+.toast { position: fixed; z-index: 60; left: 50%; transform: translateX(-50%);
+  bottom: calc(20px + env(safe-area-inset-bottom, 0px)); background: var(--tinta); color: var(--fondo);
+  padding: 12px 18px; border-radius: 10px; font-weight: 600; box-shadow: 0 6px 24px rgb(0 0 0 / .25); animation: entra .2s ease-out }
+@keyframes entra { from { opacity: 0; transform: translate(-50%, 8px) } to { opacity: 1; transform: translate(-50%, 0) } }
+
+/* ---------- clima ---------- */
+.climas { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px }
+.clima-tarjeta { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 14px 16px; border-radius: 14px; background: var(--superficie); min-width: 0; font-weight: 400 }
+.clima-tarjeta[aria-pressed="true"] { border-color: var(--hoja); box-shadow: 0 0 0 2px var(--hoja) }
+.clima-mun { font-family: var(--f-titulo); font-weight: 700; font-size: 17px }
+.clima-fila { display: flex; align-items: center; gap: 6px }
+.clima-temp { font-family: var(--f-titulo); font-size: 34px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums }
+.clima-desc { font-size: 14px; color: var(--tinta2) }
+.clima-mini { font-size: 12px; color: var(--tinta3) }
+.clima-grande { display: flex; align-items: center; gap: 16px }
+.clima-temp-g { font-family: var(--f-titulo); font-size: 44px; font-weight: 800; line-height: 1 }
+.datos-clima { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 6px 0 0 }
+.datos-clima div { background: var(--fondo); border-radius: 10px; padding: 10px 12px }
+.datos-clima dt { font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--tinta3) }
+.datos-clima dd { margin: 2px 0 0; font-weight: 700; font-size: 18px; font-variant-numeric: tabular-nums }
+.comparacion { border-top: 1px solid var(--linea); padding-top: 12px; display: flex; flex-direction: column; gap: 6px }
+.pronostico { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column }
+.pronostico li { display: grid; grid-template-columns: 74px 30px 34px minmax(40px, 1fr) 34px 52px; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--linea) }
+.p-dia { font-weight: 600 }
+.p-min, .p-max, .p-lluvia { font-family: var(--f-mono); font-size: 14px; text-align: right; font-variant-numeric: tabular-nums }
+.p-min { color: var(--tinta3) }
+.p-rango { position: relative; height: 8px; background: var(--hundido); border-radius: 4px }
+.p-rango i { position: absolute; top: 0; bottom: 0; border-radius: 4px; background: linear-gradient(90deg, var(--cielo), var(--maiz)) }
+.p-lluvia { color: var(--tinta3) }
+.p-lluvia.alta { color: var(--cielo); font-weight: 600 }
+.icono-clima { flex: none }
+.ic-sol circle { fill: var(--maiz) }
+.ic-rayo { stroke: var(--maiz); stroke-width: 2; stroke-linecap: round }
+.ic-luna { fill: var(--tinta3) }
+.ic-nube { fill: var(--hundido); stroke: var(--tinta3); stroke-width: 1.5 }
+.ic-gota, .ic-niebla { stroke: var(--cielo); stroke-width: 2.2; stroke-linecap: round }
+.ic-rayo-t { fill: var(--maiz) }
+
+@media (max-width: 1000px) { .climas { grid-template-columns: repeat(3, minmax(0, 1fr)) } }
+@media (max-width: 600px) {
+  .climas { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .form-grid { grid-template-columns: minmax(0, 1fr) }
+  button.grande { width: 100%; align-self: stretch }
+  .pronostico li { grid-template-columns: 64px 28px 30px minmax(30px, 1fr) 30px 44px; gap: 6px }
+}
+@media (prefers-reduced-motion: reduce) { .toast { animation: none } }
+
+/* los controles dentro de un rótulo usan la letra normal, no la del rótulo */
+.rotulo select, .rotulo input { font-family: var(--f-texto); letter-spacing: normal; text-transform: none; font-weight: 400; color: var(--tinta) }
