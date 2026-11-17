@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { api, ErrorApi, type ConsultaLotes, type Lote, type Opciones, type PaginaLotes } from './api'
 import FormLote from './FormLote'
+import type { AccionAviso } from './App'
 import { n0, n1 } from './formato'
 
 const INICIAL: ConsultaLotes = { buscar: '', municipio: '', cultivo: '', riego: '', origen: '', orden: 'recientes', pagina: 1, por_pagina: 20 }
@@ -8,7 +9,7 @@ const RIEGO: Record<string, string> = { No: 'Sin riego', Goteo: 'Goteo', 'Aspers
 const fecha = (f: string) => { const [a, m, d] = f.split('-'); return `${d}/${m}/${a}` }
 
 export default function Lotes({ opciones, version, onCambio, esAdmin, comoAdmin }: {
-  opciones: Opciones; version: number; onCambio: (mensaje: string) => void
+  opciones: Opciones; version: number; onCambio: (mensaje: string, accion?: AccionAviso) => void
   esAdmin: boolean; comoAdmin: (motivo: string, accion: () => void) => void
 }) {
   const [q, setQ] = useState<ConsultaLotes>(INICIAL)
@@ -20,6 +21,13 @@ export default function Lotes({ opciones, version, onCambio, esAdmin, comoAdmin 
   const [aBorrar, setABorrar] = useState<Lote | null>(null)
   const [resaltado, setResaltado] = useState<number | null>(null)
   const [restaurando, setRestaurando] = useState(false)
+  const [enPapelera, setEnPapelera] = useState<number | null>(null)
+
+  // cuántos lotes hay en la papelera (solo lo ve el administrador)
+  useEffect(() => {
+    if (!esAdmin) { setEnPapelera(null); return }
+    api.papelera(1).then(d => setEnPapelera(d.total)).catch(() => setEnPapelera(null))
+  }, [esAdmin, version])
 
   // búsqueda con una pequeña espera para no consultar en cada tecla
   useEffect(() => {
@@ -64,6 +72,7 @@ export default function Lotes({ opciones, version, onCambio, esAdmin, comoAdmin 
             <h2 id="t-lotes">Lotes y terrenos de AgroAndes</h2>
             <p className="entrada">Registra lotes nuevos, corrige los existentes o bórralos. Cada cambio se guarda en la base de datos y actualiza los gráficos del análisis.</p></div>
           <div className="acciones">
+            {esAdmin && <a className="boton-enlace grande" href="#papelera">Papelera{enPapelera ? ` (${n0(enPapelera)})` : ''}</a>}
             {esAdmin && <button type="button" className="grande peligro" onClick={() => setRestaurando(true)}>Restaurar datos originales</button>}
             <button type="button" className="primario grande" onClick={() => setForm({ abierto: true, lote: null })}>+ Registrar lote</button>
           </div>
@@ -154,7 +163,13 @@ export default function Lotes({ opciones, version, onCambio, esAdmin, comoAdmin 
       <FormLote abierto={form.abierto} lote={form.lote} opciones={opciones}
         onCerrar={() => setForm({ abierto: false, lote: null })} onGuardado={guardado} />
       <ConfirmarBorrado lote={aBorrar} onCerrar={() => setABorrar(null)}
-        onBorrado={l => { setABorrar(null); onCambio(`Lote #${l.id} borrado`) }} />
+        onBorrado={l => {
+          setABorrar(null)
+          onCambio(`Lote #${l.id} enviado a la papelera`, {
+            texto: 'Deshacer',
+            fn: () => { api.recuperar(l.id).then(() => onCambio(`Lote #${l.id} recuperado`)).catch(e => setError(e.message)) },
+          })
+        }} />
       <ConfirmarRestaurar abierto={restaurando} onCerrar={() => setRestaurando(false)}
         onRestaurado={n => { setRestaurando(false); setTexto(''); setQ(INICIAL); onCambio(`Datos restaurados: ${n0(n)} lotes originales`) }} />
     </main>
@@ -183,13 +198,13 @@ function ConfirmarBorrado({ lote, onCerrar, onBorrado }: { lote: Lote | null; on
     <dialog ref={ref} className="modal pequeno" onCancel={e => { e.preventDefault(); onCerrar() }} aria-labelledby="t-borrar">
       {lote && (
         <div className="confirmar">
-          <h2 id="t-borrar">¿Borrar el lote #{lote.id}?</h2>
+          <h2 id="t-borrar">¿Enviar el lote #{lote.id} a la papelera?</h2>
           <p>{lote.nombre ? <b>{lote.nombre}</b> : 'Lote sin nombre'} · {lote.cultivo} en {lote.municipio}, cosecha del {fecha(lote.fecha_cosecha)}.</p>
-          <p className="peq">Se elimina de la base de datos y deja de contar en el análisis. Esta acción no se puede deshacer.</p>
+          <p className="peq">El lote pasa a la papelera y deja de contar en la tabla y en los gráficos. Puedes recuperarlo desde la papelera.</p>
           {error && <p className="error" role="alert">{error}</p>}
           <footer className="modal-pie">
             <button type="button" onClick={onCerrar}>Cancelar</button>
-            <button type="button" className="peligro-lleno" onClick={borrar} disabled={borrando}>{borrando ? 'Borrando…' : 'Sí, borrar'}</button>
+            <button type="button" className="peligro-lleno" onClick={borrar} disabled={borrando}>{borrando ? 'Enviando…' : 'Enviar a la papelera'}</button>
           </footer>
         </div>
       )}
@@ -219,7 +234,7 @@ function ConfirmarRestaurar({ abierto, onCerrar, onRestaurado }: { abierto: bool
       {abierto && (
         <div className="confirmar">
           <h2 id="t-restaurar">¿Restaurar los datos originales?</h2>
-          <p>Se borran <b>todos</b> los lotes actuales, incluidos los registrados desde la página, y se vuelven a cargar los 5.000 lotes del archivo original.</p>
+          <p>Se borran <b>todos</b> los lotes actuales, incluidos los registrados desde la página y los de la papelera, y se vuelven a cargar los 5.000 lotes del archivo original.</p>
           <p className="peq">Esta acción no se puede deshacer.</p>
           {error && <p className="error" role="alert">{error}</p>}
           <footer className="modal-pie">

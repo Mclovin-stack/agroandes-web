@@ -54,6 +54,7 @@ Cualquiera puede ver los datos y registrar lotes. Editar, borrar y restaurar los
 - La contraseña se lee de la variable de entorno `ADMIN_PASSWORD`. En Render se configura en el servicio → **Environment**; nunca va en el código.
 - En el computador local, si la variable no está definida, la contraseña es `agroandes`. En Render no hay contraseña por defecto: sin la variable, nadie puede editar ni borrar.
 - La sesión dura 8 horas o hasta cerrar la pestaña. Tras 5 intentos fallidos en 5 minutos, esa dirección IP queda bloqueada temporalmente.
+- **Papelera** (solo administrador): borrar un lote lo envía a la papelera, donde deja de contar en la tabla y los gráficos. Desde ahí se puede recuperar, eliminar definitivamente o vaciar la papelera completa. Justo después de borrar aparece un aviso con **Deshacer**.
 - **Restaurar datos originales** (vista Lotes, solo administrador) borra todos los lotes y vuelve a cargar los 5.000 del CSV con su numeración original.
 
 ## Base de datos
@@ -72,7 +73,11 @@ Los 5.000 lotes del CSV se cargan limpios en la base de datos la primera vez que
 | `GET /api/lotes/{id}` | Un lote |
 | `POST /api/lotes` | Crea un lote (errores de validación en español, por campo) |
 | `PUT /api/lotes/{id}` | Edita un lote (administrador) |
-| `DELETE /api/lotes/{id}` | Borra un lote (administrador) |
+| `DELETE /api/lotes/{id}` | Envía un lote a la papelera (administrador) |
+| `GET /api/papelera` | Lotes en la papelera (administrador) |
+| `POST /api/papelera/{id}/recuperar` | Recupera un lote de la papelera (administrador) |
+| `DELETE /api/papelera/{id}` | Elimina un lote definitivamente (administrador) |
+| `DELETE /api/papelera` | Vacía la papelera (administrador) |
 | `GET /api/clima` | Clima actual y pronóstico de 7 días por municipio |
 | `POST /api/admin/ingresar` | Inicia sesión de administrador y entrega un token |
 | `POST /api/admin/restaurar` | Vuelve a cargar los 5.000 lotes originales (administrador) |

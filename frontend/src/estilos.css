@@ -286,3 +286,11 @@ dialog.modal form, .confirmar { padding: 22px; display: flex; flex-direction: co
 .admin-estado { display: flex; align-items: center; gap: 8px }
 .clave-fila { display: flex; gap: 8px; align-items: center }
 .clave-fila input { flex: 1 }
+
+/* papelera y avisos con acción */
+.boton-enlace { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 8px 14px; border: 1px solid var(--linea); border-radius: 8px; background: var(--fondo); color: var(--tinta); font-weight: 600; font-size: 15px; text-decoration: none }
+.boton-enlace:hover { border-color: var(--tinta3) }
+.boton-enlace.grande { min-height: 48px; padding: 10px 20px; font-size: 16px }
+.toast { display: flex; align-items: center; gap: 14px }
+.toast-accion { min-height: 32px; padding: 4px 12px; background: transparent; color: var(--fondo); border: 1px solid var(--fondo); font-weight: 700 }
+.toast-accion:hover:not(:disabled) { border-color: var(--fondo); background: rgb(127 127 127 / .2) }

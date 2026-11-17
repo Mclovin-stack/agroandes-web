@@ -183,3 +183,51 @@ def test_restaurar_datos_originales(cliente, admin):
     assert cliente.get(f"/api/lotes/{nuevo['id']}").status_code in (200, 404)
     ids = [x["id"] for x in cliente.get("/api/lotes", params={"orden": "recientes", "por_pagina": 5}).json()["items"]]
     assert ids[0] == 5000
+
+
+# ---------------------------------------------------------------- papelera
+def test_papelera_borrar_recuperar_y_eliminar(cliente, admin):
+    lote = cliente.post("/api/lotes", json={**NUEVO, "nombre": "Para la papelera"}).json()
+    url = f"/api/lotes/{lote['id']}"
+    total = cliente.get("/api/resumen").json()["indicadores"]["lotes"]
+
+    # borrar = a la papelera: desaparece de todo
+    assert cliente.delete(url, headers=admin).status_code == 204
+    assert cliente.get(url).status_code == 404
+    assert cliente.put(url, json=NUEVO, headers=admin).status_code == 404
+    assert cliente.get("/api/resumen").json()["indicadores"]["lotes"] == total - 1
+    assert cliente.get("/api/lotes", params={"buscar": "Para la papelera"}).json()["total"] == 0
+    assert cliente.get("/api/salud").json()["lotes"] == total - 1
+
+    # está en la papelera, con su fecha de borrado
+    pap = cliente.get("/api/papelera", headers=admin).json()
+    assert pap["items"][0]["id"] == lote["id"] and pap["items"][0]["borrado"]
+
+    # recuperar
+    r = cliente.post(f"/api/papelera/{lote['id']}/recuperar", headers=admin)
+    assert r.status_code == 200 and r.json()["borrado"] is None
+    assert cliente.get(url).status_code == 200
+    assert cliente.get("/api/resumen").json()["indicadores"]["lotes"] == total
+    assert cliente.post(f"/api/papelera/{lote['id']}/recuperar", headers=admin).status_code == 404
+
+    # eliminar definitivamente solo funciona desde la papelera
+    assert cliente.delete(f"/api/papelera/{lote['id']}", headers=admin).status_code == 404
+    cliente.delete(url, headers=admin)
+    assert cliente.delete(f"/api/papelera/{lote['id']}", headers=admin).status_code == 204
+    assert cliente.post(f"/api/papelera/{lote['id']}/recuperar", headers=admin).status_code == 404
+
+
+def test_vaciar_papelera(cliente, admin):
+    ids = [cliente.post("/api/lotes", json=NUEVO).json()["id"] for _ in range(3)]
+    for i in ids:
+        cliente.delete(f"/api/lotes/{i}", headers=admin)
+    assert cliente.get("/api/papelera", headers=admin).json()["total"] >= 3
+    assert cliente.delete("/api/papelera", headers=admin).json()["eliminados"] >= 3
+    assert cliente.get("/api/papelera", headers=admin).json()["total"] == 0
+
+
+def test_papelera_exige_admin(cliente):
+    assert cliente.get("/api/papelera").status_code == 401
+    assert cliente.post("/api/papelera/1/recuperar").status_code == 401
+    assert cliente.delete("/api/papelera/1").status_code == 401
+    assert cliente.delete("/api/papelera").status_code == 401

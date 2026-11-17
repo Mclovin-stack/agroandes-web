@@ -65,6 +65,7 @@ class LoteSalida(BaseModel):
     origen: str
     creado: datetime | None = None
     actualizado: datetime | None = None
+    borrado: datetime | None = None
 
 
 class PaginaLotes(BaseModel):

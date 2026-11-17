@@ -5,9 +5,13 @@ import Panel from './Panel'
 import Lotes from './Lotes'
 import Clima from './Clima'
 import Ingreso from './Ingreso'
+import Papelera from './Papelera'
 
-type Vista = 'panel' | 'lotes' | 'clima'
-const vistaDe = (hash: string): Vista => (hash === '#lotes' ? 'lotes' : hash === '#clima' ? 'clima' : 'panel')
+type Vista = 'panel' | 'lotes' | 'clima' | 'papelera'
+const vistaDe = (hash: string): Vista =>
+  hash === '#lotes' ? 'lotes' : hash === '#clima' ? 'clima' : hash === '#papelera' ? 'papelera' : 'panel'
+
+export interface AccionAviso { texto: string; fn: () => void }
 
 function Hoja() {
   return (
@@ -25,7 +29,7 @@ export default function App() {
   const [res, setRes] = useState<Resumen | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [version, setVersion] = useState(0)
-  const [aviso, setAviso] = useState<{ texto: string; id: number } | null>(null)
+  const [aviso, setAviso] = useState<{ texto: string; id: number; accion?: AccionAviso } | null>(null)
   const [esAdmin, setEsAdmin] = useState(() => sesion.token() !== null)
   const [ingreso, setIngreso] = useState<{ abierto: boolean; motivo: string | null }>({ abierto: false, motivo: null })
   const pendiente = useRef<(() => void) | null>(null)
@@ -73,13 +77,13 @@ export default function App() {
 
   useEffect(() => {
     if (!aviso) return
-    const t = setTimeout(() => setAviso(null), 3500)
+    const t = setTimeout(() => setAviso(null), aviso.accion ? 7000 : 3500)
     return () => clearTimeout(t)
   }, [aviso])
 
-  const onCambio = useCallback((texto: string) => {
+  const onCambio = useCallback((texto: string, accion?: AccionAviso) => {
     setVersion(v => v + 1)
-    setAviso({ texto, id: Date.now() })
+    setAviso({ texto, id: Date.now(), accion })
   }, [])
 
   const irA = (v: string) => { location.hash = v }
@@ -97,6 +101,7 @@ export default function App() {
             {enlace('panel', '#inicio', 'Panel')}
             {enlace('lotes', '#lotes', 'Lotes')}
             {enlace('clima', '#clima', 'Clima')}
+            {esAdmin && enlace('papelera', '#papelera', 'Papelera')}
           </ul></nav>
           {esAdmin ? (
             <span className="admin-estado">
@@ -118,6 +123,9 @@ export default function App() {
           <Clima />
         ) : !op || !res ? (
           <main><p className="cargando">Cargando datos de AgroAndes…</p></main>
+        ) : vista === 'papelera' ? (
+          <Papelera esAdmin={esAdmin} version={version} onCambio={onCambio}
+            pedirIngreso={() => setIngreso({ abierto: true, motivo: 'La papelera solo la puede ver el administrador.' })} />
         ) : vista === 'lotes' ? (
           <Lotes opciones={op} version={version} onCambio={onCambio} esAdmin={esAdmin} comoAdmin={comoAdmin} />
         ) : (
@@ -137,7 +145,12 @@ export default function App() {
           const accion = pendiente.current; pendiente.current = null
           accion?.()
         }} />
-      {aviso && <div className="toast" role="status" key={aviso.id}>✓ {aviso.texto}</div>}
+      {aviso && (
+        <div className="toast" role="status" key={aviso.id}>
+          <span>✓ {aviso.texto}</span>
+          {aviso.accion && <button type="button" className="toast-accion" onClick={() => { const a = aviso.accion!; setAviso(null); a.fn() }}>{aviso.accion.texto}</button>}
+        </div>
+      )}
       <Tooltip />
     </>
   )

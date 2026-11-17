@@ -37,7 +37,7 @@ export interface LoteDatos {
   fertilizante_kg: number | null; produccion_ton: number | null; rendimiento_ton_ha: number | null
 }
 export interface Lote extends LoteDatos {
-  id: number; origen: 'historico' | 'registrado'; creado: string | null; actualizado: string | null
+  id: number; origen: 'historico' | 'registrado'; creado: string | null; actualizado: string | null; borrado: string | null
 }
 export interface PaginaLotes { total: number; pagina: number; por_pagina: number; items: Lote[] }
 export interface ConsultaLotes {
@@ -158,6 +158,11 @@ export const api = {
   },
   verificarSesion: () => pedir<{ valido: boolean }>('/api/admin/verificar'),
   restaurar: () => pedir<{ lotes: number }>('/api/admin/restaurar', { method: 'POST' }),
+
+  papelera: (pagina: number, signal?: AbortSignal) => pedir<PaginaLotes>(`/api/papelera?${consulta({ pagina, por_pagina: 20 })}`, { signal }),
+  recuperar: (id: number) => pedir<Lote>(`/api/papelera/${id}/recuperar`, { method: 'POST' }),
+  eliminarDefinitivo: (id: number) => pedir<void>(`/api/papelera/${id}`, { method: 'DELETE' }),
+  vaciarPapelera: () => pedir<{ eliminados: number }>('/api/papelera', { method: 'DELETE' }),
 
   /** El clima se pide una sola vez por visita y se comparte entre la vista Clima y el formulario. */
   clima: (refrescar = false) => {

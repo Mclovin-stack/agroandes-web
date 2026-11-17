@@ -10,7 +10,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
-from sqlalchemy import Date, DateTime, Float, String, create_engine, func, select, text
+from sqlalchemy import Date, DateTime, Float, String, create_engine, func, inspect, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
 BACKEND = Path(__file__).resolve().parent.parent
@@ -51,6 +51,22 @@ class Lote(Base):
     origen: Mapped[str] = mapped_column(String(12), default="registrado", index=True)  # historico | registrado
     creado: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     actualizado: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), onupdate=func.now())
+    # papelera: con fecha = borrado (no cuenta en ningún cálculo); vacío = activo
+    borrado: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+
+
+ACTIVO = Lote.borrado.is_(None)
+EN_PAPELERA = Lote.borrado.is_not(None)
+
+
+def _migrar() -> None:
+    """Agrega columnas nuevas a una tabla creada por una versión anterior, sin perder datos."""
+    columnas = {c["name"] for c in inspect(engine).get_columns("lotes")}
+    if "borrado" not in columnas:
+        tipo = "TIMESTAMP WITH TIME ZONE" if engine.dialect.name == "postgresql" else "DATETIME"
+        with engine.begin() as con:
+            con.execute(text(f"ALTER TABLE lotes ADD COLUMN borrado {tipo}"))
+            con.execute(text("CREATE INDEX IF NOT EXISTS ix_lotes_borrado ON lotes (borrado)"))
 
 
 CAMPOS_NUM = ["area_ha", "precipitacion_mm", "temperatura_c", "ph_suelo", "fertilizante_kg",
@@ -78,6 +94,7 @@ def _cargar_csv(s: Session, limpio: pd.DataFrame) -> int:
 def iniciar(limpio: pd.DataFrame) -> None:
     """Crea la tabla y, si está vacía, la llena con los lotes del CSV."""
     Base.metadata.create_all(engine)
+    _migrar()
     with SessionLocal() as s:
         if s.scalar(select(func.count(Lote.id))):
             return
@@ -117,7 +134,7 @@ def dataframe(s: Session) -> pd.DataFrame:
         return _cache["df"]
     cols = [Lote.id, Lote.municipio, Lote.cultivo, Lote.sistema_riego, Lote.fecha_cosecha,
             *[getattr(Lote, c) for c in CAMPOS_NUM]]
-    filas = s.execute(select(*cols)).all()
+    filas = s.execute(select(*cols).where(ACTIVO)).all()   # los lotes en la papelera no cuentan
     df = pd.DataFrame(filas, columns=[c.key for c in cols])
     for c in CAMPOS_NUM:
         df[c] = pd.to_numeric(df[c], errors="coerce").astype(float)

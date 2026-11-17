@@ -4,6 +4,7 @@ Ejecutar en desarrollo (desde la carpeta backend):
     uvicorn app.main:app --reload
 """
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated, Literal
@@ -15,7 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from pydantic import BaseModel, Field
@@ -65,7 +66,8 @@ Admin = Depends(seguridad.requiere_admin)
 
 @app.get("/api/salud")
 def salud(s: Sesion):
-    return {"estado": "ok", "lotes": s.scalar(select(func.count(db.Lote.id))), "base": db.engine.dialect.name}
+    return {"estado": "ok", "lotes": s.scalar(select(func.count(db.Lote.id)).where(db.ACTIVO)),
+            "base": db.engine.dialect.name}
 
 
 # ---------------------------------------------------------------- administrador
@@ -120,7 +122,7 @@ def resumen(s: Sesion):
         "indicadores": analisis.indicadores(df),
         "histograma": analisis.histograma(df),
         "periodo": periodo,
-        "origen": {k: int(v) for k, v in s.execute(select(db.Lote.origen, func.count()).group_by(db.Lote.origen)).all()},
+        "origen": {k: int(v) for k, v in s.execute(select(db.Lote.origen, func.count()).where(db.ACTIVO).group_by(db.Lote.origen)).all()},
     }
 
 
@@ -167,7 +169,7 @@ def listar_lotes(
     pagina: int = Query(1, ge=1),
     por_pagina: int = Query(20, ge=5, le=100),
 ):
-    q = select(db.Lote)
+    q = select(db.Lote).where(db.ACTIVO)
     if buscar and buscar.strip():
         b = buscar.strip()
         cond = [db.Lote.nombre.ilike(f"%{b}%")]
@@ -187,10 +189,11 @@ def listar_lotes(
     return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "items": items}
 
 
-def _buscar(s: Session, lote_id: int) -> db.Lote:
+def _buscar(s: Session, lote_id: int, papelera: bool = False) -> db.Lote:
+    """Un lote activo o, con papelera=True, uno que esté en la papelera."""
     lote = s.get(db.Lote, lote_id)
-    if not lote:
-        raise HTTPException(404, f"No existe el lote {lote_id}")
+    if not lote or (lote.borrado is not None) != papelera:
+        raise HTTPException(404, f"No existe el lote {lote_id}" + (" en la papelera" if papelera else ""))
     return lote
 
 
@@ -222,10 +225,45 @@ def editar_lote(lote_id: int, datos: LoteEntrada, s: Sesion):
 
 @app.delete("/api/lotes/{lote_id}", status_code=204, dependencies=[Admin])
 def borrar_lote(lote_id: int, s: Sesion):
-    s.delete(_buscar(s, lote_id))
+    """Envía el lote a la papelera: deja de contar en todo, pero se puede recuperar."""
+    _buscar(s, lote_id).borrado = datetime.now(timezone.utc)
     s.commit()
     db.marcar_cambio()
     return Response(status_code=204)
+
+
+# ---------------------------------------------------------------- papelera (solo administrador)
+@app.get("/api/papelera", response_model=PaginaLotes, dependencies=[Admin])
+def ver_papelera(s: Sesion, pagina: int = Query(1, ge=1), por_pagina: int = Query(20, ge=5, le=100)):
+    q = select(db.Lote).where(db.EN_PAPELERA)
+    total = s.scalar(select(func.count()).select_from(q.subquery()))
+    items = s.scalars(q.order_by(db.Lote.borrado.desc(), db.Lote.id.desc())
+                      .offset((pagina - 1) * por_pagina).limit(por_pagina)).all()
+    return {"total": total, "pagina": pagina, "por_pagina": por_pagina, "items": items}
+
+
+@app.post("/api/papelera/{lote_id}/recuperar", response_model=LoteSalida, dependencies=[Admin])
+def recuperar_lote(lote_id: int, s: Sesion):
+    lote = _buscar(s, lote_id, papelera=True)
+    lote.borrado = None
+    s.commit()
+    s.refresh(lote)
+    db.marcar_cambio()
+    return lote
+
+
+@app.delete("/api/papelera/{lote_id}", status_code=204, dependencies=[Admin])
+def eliminar_definitivo(lote_id: int, s: Sesion):
+    s.delete(_buscar(s, lote_id, papelera=True))
+    s.commit()
+    return Response(status_code=204)
+
+
+@app.delete("/api/papelera", dependencies=[Admin])
+def vaciar_papelera(s: Sesion):
+    n = s.execute(delete(db.Lote).where(db.EN_PAPELERA)).rowcount
+    s.commit()
+    return {"eliminados": n}
 
 
 # ---------------------------------------------------------------- clima
